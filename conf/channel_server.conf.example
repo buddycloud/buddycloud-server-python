@@ -17,3 +17,13 @@ dumpProtocol = True
 log_level = DEBUG
 log_format = '%(asctime)s %(levelname)-8s %(name)s: %(message)s'
 log_folder = 
+
+[Storage]
+backend = Memory
+
+[Memory-storage]
+class = buddycloud.channel_server.storage.MemoryStorageModule
+persist = False
+
+[Storm-storage]
+class = buddycloud.channel_server.storage.StormStorageModule

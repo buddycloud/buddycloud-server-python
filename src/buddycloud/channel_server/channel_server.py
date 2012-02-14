@@ -1,4 +1,4 @@
-# Copyright 2011 James Tait - All Rights Reserved
+# Copyright 2011-2012 James Tait - All Rights Reserved
 
 """Definition of the buddycloud channel server."""
 
@@ -9,6 +9,8 @@ import uuid
 import xmpp
 
 from datetime import datetime
+
+from buddycloud.channel_server.storage import init_storage
 
 
 NS_PUBSUB_OWNER = '%s#%s' % (xmpp.protocol.NS_PUBSUB, 'owner')
@@ -27,7 +29,8 @@ class ChannelServer:
         self.is_online = False
         self.logger = logging.getLogger('ChannelServer')
         handler = logging.StreamHandler()
-        formatter = logging.Formatter(config.get('Logging', 'log_format', raw=True))
+        formatter = logging.Formatter(
+            config.get('Logging', 'log_format', raw=True))
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)
         self.logger.setLevel(
@@ -42,11 +45,13 @@ class ChannelServer:
         # Auth config section
         self.sasl_username = None
         self.secret = None
+        # Storage section
+        self.storage = init_storage(config)
+        # Do the set-up
         self._parse_config(config)
-        self.temp_entry_store = {}
 
     def _parse_config(self, config):
-        """"""
+        """Parse the configuration and set up the component."""
         self.jid = config.get('Component', 'jid')
         self.allow_register = config.getboolean('Component', 'allow_register')
         self.component_binding = config.getboolean(
@@ -62,6 +67,7 @@ class ChannelServer:
                 'main_server', 'sasl_username', 'secret'))))
 
     def register_handlers(self):
+        """Register handlers for the various XMPP stanzas."""
         self.connection.RegisterHandler('message', self.xmpp_message)
         self.connection.RegisterHandler('presence', self.xmpp_presence)
         self.connection.RegisterHandler(
@@ -76,19 +82,22 @@ class ChannelServer:
         self.disco.setDiscoHandler(self.xmpp_base_disco, node='', jid=self.jid)
 
     def xmpp_message(self, conn, event):
+        """Callback to handle XMPP message stanzas."""
         self.logger.debug(event)
 
     def xmpp_presence(self, conn, event):
+        """Callback to handle XMPP presence stanzas."""
         self.logger.debug(event)
 
     def xmpp_pubsub_get(self, conn, event):
+        """Callback to handle XMPP PubSub queries."""
         self.logger.debug('Pubsub request: %s', event)
         tag = event.getTag('pubsub')
         if tag and tag.getNamespace() == xmpp.protocol.NS_PUBSUB:
             node = tag.getTagAttr('items', 'node')
             rsm = tag.getTag('set', namespace=NS_RSM)
             set_size = int(rsm.getTagData('max'))
-            channel = self.temp_entry_store.get(node, {})
+            channel = self.storage.get_node(node)
             self.logger.debug(
                 'Got channel entries for node %s: %s', node, channel)
             if channel is None:
@@ -104,14 +113,15 @@ class ChannelServer:
                 item.addChild(node=channel_item[1][1])
             rsm = pubsub.setTag('set', namespace=NS_RSM)
             if len(channel.items()) > 0:
-                rsm.setTagData('first', channel.items()[0][0], attrs={'index': 0})
+                rsm.setTagData(
+                    'first', channel.items()[0][0], attrs={'index': 0})
                 rsm.setTagData('last', channel.items()[-1][0])
             rsm.setTagData('count', len(channel.items()))
             conn.send(reply)
             raise xmpp.protocol.NodeProcessed
 
-
     def xmpp_pubsub_set(self, conn, event):
+        """Callback to handle XMPP PubSub commands."""
         self.logger.debug('Pubsub command: %s', event)
         tag = event.getTag('pubsub')
         if tag and tag.getNamespace() == xmpp.protocol.NS_PUBSUB:
@@ -128,9 +138,9 @@ class ChannelServer:
             entry.setTag('link', attrs={'rel': 'self', 'href':
                 'xmpp:%s?pubsub;action=retrieve;node=%s;item=%s' % (self.jid,
                     node, entry_id)})
-            items = self.temp_entry_store.get(node, {})
+            items = self.storage.get_node(node)
             items[entry_id] = (datetime.utcnow(), entry)
-            self.temp_entry_store[node] = items
+            self.storage.set_node(node, items)
             reply = event.buildReply('result')
             pubsub = reply.setTag('pubsub', namespace=xmpp.protocol.NS_PUBSUB)
             publish = pubsub.setTag('publish', attrs={'node': node})
@@ -139,7 +149,7 @@ class ChannelServer:
             raise xmpp.protocol.NodeProcessed
 
     def xmpp_register_set(self, conn, event):
-        """"""
+        """Callback to handle XMPP register commands."""
         self.logger.debug('Register command: %s', event)
         tag = event.getTag('query')
         if tag and tag.getNamespace() == xmpp.protocol.NS_REGISTER:
@@ -186,7 +196,7 @@ class ChannelServer:
             self.xmpp_connect()
 
     def xmpp_base_disco(self, conn, event, disco_type):
-        """"""
+        """Callback to handle XMPP Disco requests."""
         self.logger.debug('Disco event: %s', event)
         fromjid = event.getFrom().getStripped().__str__()
         to = event.getTo()
@@ -211,9 +221,9 @@ class ChannelServer:
                 elif disco_type == 'items':
                     return [
                         dict(node=x, jid=self.jid) for x in
-                            self.temp_entry_store.keys()]
+                            self.storage.get_nodes()]
             else:
-                channel = self.temp_entry_store.get(node, {})
+                channel = self.storage.get_node(node)
                 if channel and disco_type == 'info':
                     features = [xmpp.protocol.NS_DISCO_INFO,
                             xmpp.protocol.NS_DISCO_ITEMS,
@@ -242,3 +252,4 @@ class ChannelServer:
             if not self.connection.isConnected():
                 self.xmpp_disconnect()
         self.connection.disconnect()
+        self.storage.shutdown()

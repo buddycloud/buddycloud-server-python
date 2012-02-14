@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 
-# Copyright 2011 James Tait - All Rights Reserved
+# Copyright 2011-2012 James Tait - All Rights Reserved
 
 """Main entry point for buddycloud channel server."""
 
@@ -13,10 +13,12 @@ import sys
 from buddycloud.channel_server.channel_server import ChannelServer
 from optparse import OptionParser
 
+
 def sigHandler(signum, frame):
     """Signal handler."""
     channel_server.offlinemsg = 'Signal handler called with signal %s' % signum
     channel_server.is_online = False
+
 
 if __name__ == '__main__':
     parser = OptionParser('%prog [options]')
@@ -35,12 +37,13 @@ if __name__ == '__main__':
 
     logger = logging.getLogger('main')
     handler = logging.StreamHandler()
-    formatter = logging.Formatter(config.get('Logging', 'log_format', raw=True))
+    formatter = logging.Formatter(
+        config.get('Logging', 'log_format', raw=True))
     handler.setFormatter(formatter)
     logger.setLevel(logging.__getattribute__(
         config.get('Logging', 'log_level')))
     logger.addHandler(handler)
-    
+
     channel_server = ChannelServer(config)
     if not channel_server.xmpp_connect():
         logger.fatal('Could not connect to server, or password mismatch!')
