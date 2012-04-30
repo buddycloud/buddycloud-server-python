@@ -20,7 +20,7 @@ NS_THREADS = 'http://purl.org/syndication/thread/1.0'
 NS_ACTIVITY_STREAMS = 'http://activitystrea.ms/spec/1.0/'
 
 
-class ChannelServer:
+class ChannelServer(object):
     """XMPP component for buddycloud channel server."""
 
     def __init__(self, config):
@@ -101,8 +101,8 @@ class ChannelServer:
             self.logger.debug(
                 'Got channel entries for node %s: %s', node, channel)
             if channel is None:
-                # TODO Channel does not exist - return 404
-                return
+                conn.send(xmpp.protocol.Error(event, xmpp.ERR_ITEM_NOT_FOUND)) 
+                raise xmpp.protocol.NodeProcessed
             reply = event.buildReply('result')
             pubsub = reply.setTag('pubsub',
                     namespace=xmpp.protocol.NS_PUBSUB)
@@ -151,10 +151,19 @@ class ChannelServer:
     def xmpp_register_set(self, conn, event):
         """Callback to handle XMPP register commands."""
         self.logger.debug('Register command: %s', event)
+        if event.getTo().getDomain() != self.jid:
+            conn.send(xmpp.protocol.Error(event, xmpp.ERR_NOT_ALLOWED)) 
+            raise xmpp.protocol.NodeProcessed
         tag = event.getTag('query')
         if tag and tag.getNamespace() == xmpp.protocol.NS_REGISTER:
             fromjid = event.getFrom().getStripped().__str__()
             # Create /user/<jid>/posts
+            node = self.storage.get_node(u'/user/%s/posts' % fromjid)
+            if node:
+                error = xmpp.protocol.Error(event, xmpp.ERR_CONFLICT)
+                error.addChild(node=tag)
+                conn.send(error)
+                raise xmpp.protocol.NodeProcessed
             # Create /user/<jid>/geo/previous
             # Create /user/<jid>/geo/current
             # Create /user/<jid>/geo/next
