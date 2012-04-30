@@ -2,6 +2,8 @@
 
 """Storage module for buddycloud channel server."""
 
+import copy
+
 
 def init_storage(config):
     """Initialise the storage module."""
@@ -22,6 +24,10 @@ class StorageModule(object):
         """Set the configuration of this storage module."""
         pass
 
+    def create_node(self, node, node_config):
+        """Create a PubSub node with the given configuration."""
+        raise NotImplemented
+
     def get_nodes(self):
         """Get a list of all the available PubSub nodes."""
         raise NotImplemented
@@ -41,7 +47,19 @@ class StorageModule(object):
 
 
 class MemoryStorageModule(StorageModule):
-    """In-memory storage."""
+    """In-memory storage.
+    
+    NOTE: This module is intended for testing only.  It is full-fat,
+    vitamin-free, high-calorie, artificially-preserved, hydrogenated, salt-rich
+    badness, totally non-persistent, non-transactional and non-threadsafe and
+    definitely not suitable for production use.
+    
+    Creates an in-memory dictionary to hold nodes and items.  The dictionary is
+    keyed on the node ID, the value being another dictionary whose key is the
+    entry ID and whose value is a tuple consisting of a timestamp and the entry
+    Node object:
+        
+        {'node_id': {'entry_id': (timestamp, entry_node)}}"""
 
     def __init__(self):
         self.temp_entry_store = {}
@@ -52,8 +70,8 @@ class MemoryStorageModule(StorageModule):
 
     def get_node(self, node):
         """Get the requested PubSub node."""
-        return self.temp_entry_store.get(node, {})
+        return copy.deepcopy(self.temp_entry_store.get(node, None))
 
     def set_node(self, node, items):
         """Set the requested PubSub node."""
-        self.temp_entry_store[node] = items
+        self.temp_entry_store[node] = copy.deepcopy(items)
