@@ -22,8 +22,9 @@ log_folder =
 backend = Memory
 
 [Memory-storage]
-class = buddycloud.channel_server.storage.MemoryStorageModule
+class = buddycloud.channel_server.storage.memory.MemoryStorageBackend
 persist = False
 
 [Storm-storage]
-class = buddycloud.channel_server.storage.StormStorageModule
+class = buddycloud.channel_server.storage.storm.StormStorageBackend
+uri = schema://username:password@hostname:port/database_name
