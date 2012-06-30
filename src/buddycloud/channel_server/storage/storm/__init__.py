@@ -2,7 +2,7 @@
 
 """Storm storage module for buddycloud channel server."""
 
-import copy 
+import copy
 import logging
 
 from datetime import datetime
